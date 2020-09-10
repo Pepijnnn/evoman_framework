@@ -10,6 +10,11 @@ from demo_controller import player_controller
 import numpy as np
 import time
 from sklearn import preprocessing
+from sklearn import metrics
+from scipy import spatial
+import itertools
+import random
+
 
 experiment_name = 'pep_spec'
 if not os.path.exists(experiment_name):
@@ -19,7 +24,7 @@ n_hidden = 10
 
 # initializes environment with ai player using random controller, playing against static enemy
 env = Environment(experiment_name=experiment_name,
-                  enemies=[3],
+                  enemies=[1],
                   playermode='ai',
                   player_controller=player_controller(n_hidden),
                   level=2)
@@ -29,10 +34,11 @@ env = Environment(experiment_name=experiment_name,
 
 n_vars = (env.get_num_sensors()+1)*n_hidden + (n_hidden+1)*5
 
-pop_size = 30
+pop_size = 50
 # num_pop=4
-max_generations = 16
-mutation_factor = 0.7
+max_generations = 100
+mutation_factor = 0.008
+elitist_combination_type = 2
 print(f"Vars are {n_vars}.")
 
 start_time = time.time()
@@ -77,11 +83,62 @@ def mutate(child):
             child[i] = child[i] + np.random.normal(0,1)
     return child
 
+# add the children of the furthest and closest cosine sim score to the population of the top10
+# def elitism_breeding(pop, new_population):
+#     best_ten_in_pop = np.argsort(fitness_pop)[-10:]
+#     comb_list = []
+#     for c in itertools.combinations(best_ten_in_pop, 2):
+#         # c is the combination (1,4) of the best indexes pop the population
+#         comb_list.append((c,1 - spatial.distance.cosine(pop[c[0]], pop[c[1]])))
+#     comb_list.sort(key=lambda x:x[1])
+
+#     # return the children closest and furthers cossim parents
+#     eval_this = [pop[comb_list[0][0][0]], pop[comb_list[0][0][1]], pop[comb_list[-1][0][0]], pop[comb_list[-1][0][1]]]
+#     # lowest similarity - highest similarity
+#     for i in [comb_list[0][0], comb_list[-1][0]]:
+#         # max 4 children
+#         n_children = np.random.randint(1,4, 1)[0]
+#         children = np.zeros((n_children, n_vars))
+#         print(n_children)
+#         print(pop[i[0]].shape)
+#         for child in range(n_children):
+#             # 3 random probs add up to 1
+#             randomness = np.random.dirichlet(np.ones(2),size=1)[0]
+#             if elitist_combination_type == 1:
+#                 y = list(range(265))
+#                 random.shuffle(y)
+#                 y1 = y[:132]
+#                 y2 = y[132:]
+#                 # each child combination of their parents
+#                 # integer gene based
+#                 new_child = np.zeros(265)
+#                 for yy in y1:
+#                     new_child[yy] = pop[i[0]][yy]
+#                 for yy in y2:
+#                     new_child[yy] = pop[i[1]][yy]
+#                 children[child] = new_child
+#             else:
+#                 children[child] = pop[i[0]]*float(randomness[0])+\
+#                                     pop[i[1]]*float(randomness[1])
+
+#             # mutate child
+#             children[child] = mutate(children[child])
+
+#             # new_population = np.vstack((new_population, children[child]))
+#             new_population.append(children[child])
+#             eval_this.append(children[child])
+#     r = evaluate(eval_this)
+#     print(r)
+#     print("TOT HIERRRRRRRRRRR")
+#     return new_population
+    
+
 def crossover(population):
     print(np.zeros((0,n_vars)).shape)
     # print("Pop shape", population.shape[0])
-    new_population = np.zeros((0,n_vars))
-
+    # new_population = np.zeros((0,n_vars))
+    new_population = []
+    # new_population = elitism_breeding(population, new_population)
     for pop in range(1,int(population.shape[0]/2)):
 
         p1f1 = tournament_selection(population)
@@ -93,6 +150,7 @@ def crossover(population):
         # max 4 children
         n_children = np.random.randint(1,4, 1)[0]
         children = np.zeros((n_children, n_vars))
+
         for child in range(n_children):
             # 3 random probs add up to 1
             randomness = np.random.dirichlet(np.ones(3),size=1)[0]
@@ -105,9 +163,10 @@ def crossover(population):
             # mutate child
             children[child] = mutate(children[child])
 
-            new_population = np.vstack((new_population, children[child]))
+            # new_population = np.vstack((new_population, children[child]))
+            new_population.append(children[child])
 
-    return new_population
+    return np.array(new_population)
 
 # init population randomly
 if not os.path.exists(experiment_name+'/solution'):
@@ -137,7 +196,7 @@ text_file.close()
 
 # apply evolution
 best_previous, second_best_previous = fitness_pop[best_in_pop[-1]], fitness_pop[best_in_pop[-2]]
-
+old_best_score, nr_unchanged = 0, 0
 for i in range(generation_number, max_generations+1):
     print(f"gen number: {i}. population {population.shape}")
     children = crossover(population)
@@ -159,21 +218,23 @@ for i in range(generation_number, max_generations+1):
     # elitism
     chosen = np.append(chosen,best_in_pop[-1])
     chosen = np.append(chosen,best_in_pop[-2])
-    
+
     population = population[chosen]
     fitness_pop = fitness_pop[chosen]
 
-    # decrease mutation factor every 5 generations until 0.2
-    if i%5 == 0 and mutation_factor > 0.2:
-        mutation_factor -= 0.1
+    # decrease mutation factor every 5 generations until 0.1
+    if i%3 == 0 and mutation_factor > 0.1:
+        mutation_factor -= 0.05
 
     # best, mean, std calculation
     best_in_pop = np.argsort(fitness_pop)[-2:]
     mean, std = np.mean(fitness_pop), np.std(fitness_pop)
+    
+    print(f"Mean: {mean}\nSTD: {std}\nBest: {fitness_pop[best_in_pop[-1]]}\nSecond best: {fitness_pop[best_in_pop[-2]]}")
 
     # saves the results for population
     text_file = open(experiment_name+"/pep_results.txt", "a")
-    n = text_file.write(f'\n\nBest:{fitness_pop[best_in_pop[-1]]} \nSecond best:{fitness_pop[best_in_pop[-2]]}\nMean:{mean}\nstd:{std}\ngeneration: {i}\nBest_pop: {population[best_in_pop[-1]]} ')
+    n = text_file.write(f'\n\nBest:{fitness_pop[best_in_pop[-1]]} \nSecond best:{fitness_pop[best_in_pop[-2]]}\nMean:{mean}\nstd:{std}\nGeneration: {i}\nBest_pop: {population[best_in_pop[-1]]} ')
     text_file.close()
     
 
@@ -191,4 +252,10 @@ print(f"Population shape: {population.shape}")
 print(f"Fitness pop: {fitness_pop}")
 print(f"Best: {best_in_pop[-1]}, Second best: {best_in_pop[-2]}")
 
+all_sim_score = []
+for en in range(1,9):
+    env.update_parameter('enemies', [en])
+    sim_score = simulation(env, population[best_in_pop[-1]])
+    all_sim_score.append((en, sim_score))
+print(all_sim_score)
 
