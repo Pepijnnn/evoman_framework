@@ -9,6 +9,7 @@ from environment import Environment
 from demo_controller import player_controller
 import numpy as np
 import time
+from sklearn import preprocessing
 
 experiment_name = 'pep_spec'
 if not os.path.exists(experiment_name):
@@ -18,6 +19,7 @@ n_hidden = 10
 
 # initializes environment with ai player using random controller, playing against static enemy
 env = Environment(experiment_name=experiment_name,
+                  enemies=[3],
                   playermode='ai',
                   player_controller=player_controller(n_hidden),
                   level=2)
@@ -27,9 +29,10 @@ env = Environment(experiment_name=experiment_name,
 
 n_vars = (env.get_num_sensors()+1)*n_hidden + (n_hidden+1)*5
 
-pop_size = 20
+pop_size = 30
 # num_pop=4
-max_generations = 10
+max_generations = 16
+mutation_factor = 0.7
 print(f"Vars are {n_vars}.")
 
 start_time = time.time()
@@ -42,45 +45,62 @@ def simulation(env,x):
 def evaluate(x):
     return np.array([simulation(env,y) for y in x])
 
-def population_random_most_fit_reduction(pop):
+# randomly select two indivs out of pop and return the fittest
+def tournament_selection(pop):
     c1 = np.random.randint(0,pop.shape[0],1)
     c2 = np.random.randint(0,pop.shape[0],1)
-    # print("c1, c2", c1,c2, "population shape", pop.shape[0])
-    # print(pop[c1][0].shape, pop[c1].shape )
-    return (pop[c1][0],fitness_pop[c1]) if fitness_pop[c1] > fitness_pop[c2] else (pop[c2][0],fitness_pop[c2])
 
+    # get different parents
+    while c2 == c1:
+        c2 = np.random.randint(0,pop.shape[0],1)
+    c3 = np.random.randint(0,pop.shape[0],1)
+    while c3 == c1 or c3 == c2:
+        c3 = np.random.randint(0,pop.shape[0],1)
 
-mutation_factor = 0.1
+    best = np.argmax([fitness_pop[c1],fitness_pop[c2],fitness_pop[c3]])
+
+    if best == 0:
+        return (pop[c1][0],fitness_pop[c1])
+    elif best == 1:
+        return (pop[c2][0],fitness_pop[c2])
+    elif best == 2:
+        return (pop[c3][0],fitness_pop[c3])
+    else:
+        print("Out of best array")
+        return False
+    # return (pop[c1][0],fitness_pop[c1]) if fitness_pop[c1] > fitness_pop[c2] else (pop[c2][0],fitness_pop[c2])
 
 # for every gen randomly choose to mutate or not
 def mutate(child):
-    # print("old child",child)
     for i in range(len(child)):
         if np.random.rand(1) <= mutation_factor:
             child[i] = child[i] + np.random.normal(0,1)
-    # print("new child",child)
     return child
 
 def crossover(population):
-    # print("inside")
     print(np.zeros((0,n_vars)).shape)
     # print("Pop shape", population.shape[0])
     new_population = np.zeros((0,n_vars))
-    for p in range(0,population.shape[0],2):
-        p1f1 = population_random_most_fit_reduction(population)
-        p2f2 = population_random_most_fit_reduction(population)
-        # p3f3 = population_random_most_fit_reduction(population)
-        best_parent = 0 if p1f1[1] > p2f2[1] else 1
-        
+
+    for pop in range(1,int(population.shape[0]/2)):
+
+        p1f1 = tournament_selection(population)
+        p2f2 = tournament_selection(population)
+        p3f3 = tournament_selection(population)
+
+        best_parent = np.argmax([p1f1[1],p2f2[1],p3f3[1]])
+
         # max 4 children
         n_children = np.random.randint(1,4, 1)[0]
         children = np.zeros((n_children, n_vars))
         for child in range(n_children):
-            # randomness to each child
-            randomness = np.random.uniform(0,1)
+            # 3 random probs add up to 1
+            randomness = np.random.dirichlet(np.ones(3),size=1)[0]
 
             # each child combination of their parents
-            children[child] = p1f1[0]*randomness+p2f2[0]*(1-randomness)
+            children[child] = p1f1[0]*float(randomness[0])+\
+                              p2f2[0]*float(randomness[1])+\
+                              p3f3[0]*float(randomness[2])
 
             # mutate child
             children[child] = mutate(children[child])
@@ -118,8 +138,6 @@ text_file.close()
 # apply evolution
 best_previous, second_best_previous = fitness_pop[best_in_pop[-1]], fitness_pop[best_in_pop[-2]]
 
-from sklearn import preprocessing
-
 for i in range(generation_number, max_generations+1):
     print(f"gen number: {i}. population {population.shape}")
     children = crossover(population)
@@ -129,24 +147,25 @@ for i in range(generation_number, max_generations+1):
     best_in_pop = np.argsort(fitness_pop)[-2:]
 
     # eliminate bad population
-    # population = eliminate_bad_population(population)
     fit_pop_cp = fitness_pop
-    print("fitness pop cp: ", fit_pop_cp.shape, fit_pop_cp)
+
     # min max scaling
     fit_pop_norm = preprocessing.minmax_scale(fitness_pop)  
-    print("fitpopnorm: ", fit_pop_norm.shape, fit_pop_norm)
     probs = (fit_pop_norm)/(fit_pop_norm).sum()
-    print("probs: ", probs)
-    # 3 is n_population
+
+    # choose new population based on fitness
     chosen = np.random.choice(population.shape[0], pop_size-2 , p=probs, replace=False)
-    print("chosen: ", chosen)
-    # manually add the best of the population
+
+    # elitism
     chosen = np.append(chosen,best_in_pop[-1])
     chosen = np.append(chosen,best_in_pop[-2])
-    print("chosen2: ", chosen)
+    
     population = population[chosen]
-    print(population.shape)
     fitness_pop = fitness_pop[chosen]
+
+    # decrease mutation factor every 5 generations until 0.2
+    if i%5 == 0 and mutation_factor > 0.2:
+        mutation_factor -= 0.1
 
     # best, mean, std calculation
     best_in_pop = np.argsort(fitness_pop)[-2:]
