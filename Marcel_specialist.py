@@ -16,6 +16,7 @@ import time
 import numpy as np
 from math import fabs,sqrt
 import glob, os
+from sklearn import preprocessing
 
 
 experiment_name = 'extended crossover lower mutate rate random doomsday own fitness  v2'
@@ -57,6 +58,9 @@ gens = 30
 mutation = 0.02
 last_best = 0
 
+# early stopping parameter after 15 rounds
+stopping = False
+
 
 # runs simulation
 def simulation(env,x):
@@ -67,16 +71,16 @@ def simulation(env,x):
     return f
 
 # normalizes
-def norm(x, pfit_pop):
+# def norm(x, pfit_pop):
 
-    if ( max(pfit_pop) - min(pfit_pop) ) > 0:
-        x_norm = ( x - min(pfit_pop) )/( max(pfit_pop) - min(pfit_pop) )
-    else:
-        x_norm = 0
+#     if ( max(pfit_pop) - min(pfit_pop) ) > 0:
+#         x_norm = ( x - min(pfit_pop) )/( max(pfit_pop) - min(pfit_pop) )
+#     else:
+#         x_norm = 0
 
-    if x_norm <= 0:
-        x_norm = 0.0000000001
-    return x_norm
+#     if x_norm <= 0:
+#         x_norm = 0.0000000001
+#     return x_norm
 
 
 # evaluation
@@ -127,7 +131,11 @@ def crossover(pop):
         offspring =  np.zeros( (n_offspring, n_vars) )
 
         for f in range(0,n_offspring):
-            offspring[f] = p1*(fit_1/(fit_1 + fit_2+fit_3))+p2*(fit_2/(fit_1 + fit_2))+p3*(fit_2/(fit_1 + fit_2+fit_3))
+            randomness = np.random.dirichlet(np.ones(3),size=1)[0]
+            
+            offspring[f] = p1*float(randomness[0])+\
+                           p2*float(randomness[1])+\
+                           p3*float(randomness[2])
 
             # mutation
             for i in range(0,len(offspring[f])):
@@ -135,7 +143,7 @@ def crossover(pop):
                     chance = np.random.uniform(0, 1)
                     if chance <= 0.34:
                         offspring[f][i] =   offspring[f][i]+np.random.normal(0, 1)
-                # mutate by swapping to genes (own addition)
+                # mutate by swapping two genes (own addition)
                     elif 0.34 < chance <= 0.67:
                         rand_index = np.random.randint(0,len(offspring[f]))
 
@@ -154,23 +162,23 @@ def crossover(pop):
 
 
 # kills the worst genomes, and replace with new best/random solutions
-def doomsday(pop,fit_pop):
+# def doomsday(pop,fit_pop):
 
-    worst = int(npop/4)  # a quarter of the population
-    order = np.argsort(fit_pop)
-    orderasc = order[0:worst]
+#     worst = int(npop/4)  # a quarter of the population
+#     order = np.argsort(fit_pop)
+#     orderasc = order[0:worst]
 
-    for o in orderasc:
-        for j in range(0,n_vars):
-            pro = np.random.uniform(0,1)
-            if np.random.uniform(0,1)  <= pro:
-                pop[o][j] = np.random.uniform(dom_l, dom_u) # random dna, uniform dist.
-            else:
-                pop[o][j] = pop[order[-1:]][0][j] # dna from best
+#     for o in orderasc:
+#         for j in range(0,n_vars):
+#             pro = np.random.uniform(0,1)
+#             if np.random.uniform(0,1)  <= pro:
+#                 pop[o][j] = np.random.uniform(dom_l, dom_u) # random dna, uniform dist.
+#             else:
+#                 pop[o][j] = pop[order[-1:]][0][j] # dna from best
 
-        fit_pop[o]=evaluate([pop[o]])
+#         fit_pop[o]=evaluate([pop[o]])
 
-    return pop,fit_pop
+#     return pop,fit_pop
 
 
 
@@ -246,7 +254,10 @@ for i in range(ini_g+1, gens):
 
     # selection
     fit_pop_cp = fit_pop
-    fit_pop_norm =  np.array(list(map(lambda y: norm(y,fit_pop_cp), fit_pop))) # avoiding negative probabilities, as fitness is ranges from negative numbers
+
+    # use sklearn minmax scaler
+    fit_pop_norm = preprocessing.minmax_scale(fit_pop)  
+    # fit_pop_norm =  np.array(list(map(lambda y: norm(y,fit_pop_cp), fit_pop))) # avoiding negative probabilities, as fitness is ranges from negative numbers
     probs = (fit_pop_norm)/(fit_pop_norm).sum()
     chosen = np.random.choice(pop.shape[0], npop , p=probs, replace=False)
     chosen = np.append(chosen[1:],best)
@@ -263,13 +274,14 @@ for i in range(ini_g+1, gens):
         notimproved = 0
 
     if notimproved >= 15:
+        print("Early stopping activated")
+        stopping = True
+        # file_aux  = open(experiment_name+'/results.txt','a')
+        # file_aux.write('\ndoomsday')
+        # file_aux.close()
 
-        file_aux  = open(experiment_name+'/results.txt','a')
-        file_aux.write('\ndoomsday')
-        file_aux.close()
-
-        pop, fit_pop = doomsday(pop,fit_pop)
-        notimproved = 0
+        # pop, fit_pop = doomsday(pop,fit_pop)
+        # notimproved = 0
 
     best = np.argmax(fit_pop)
     std  =  np.std(fit_pop)
@@ -294,6 +306,9 @@ for i in range(ini_g+1, gens):
     solutions = [pop, fit_pop]
     env.update_solutions(solutions)
     env.save_state()
+
+    if stopping == True:
+        break
 
 
 
