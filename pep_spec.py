@@ -43,9 +43,15 @@ print(f"Vars are {n_vars}.")
 
 start_time = time.time()
 
+# def simulation(env,x):
+#     f,*_ = env.play(pcont=x)
+#     # print(f"simulation {f},{p},{e},{t}")
+#     return f
 def simulation(env,x):
-    f,*_ = env.play(pcont=x)
-    # print(f"simulation {f},{p},{e},{t}")
+    f,p,e,t = env.play(pcont=x)
+
+    f = (1001 - t)/1000 *(p-e)
+    print("Own cool fitness score: {}".format(f))
     return f
 
 def evaluate(x):
@@ -84,53 +90,53 @@ def mutate(child):
     return child
 
 # add the children of the furthest and closest cosine sim score to the population of the top10
-# def elitism_breeding(pop, new_population):
-#     best_ten_in_pop = np.argsort(fitness_pop)[-10:]
-#     comb_list = []
-#     for c in itertools.combinations(best_ten_in_pop, 2):
-#         # c is the combination (1,4) of the best indexes pop the population
-#         comb_list.append((c,1 - spatial.distance.cosine(pop[c[0]], pop[c[1]])))
-#     comb_list.sort(key=lambda x:x[1])
+def elitism_breeding(pop, new_population):
+    best_ten_in_pop = np.argsort(fitness_pop)[-10:]
+    comb_list = []
+    for c in itertools.combinations(best_ten_in_pop, 2):
+        # c is the combination (1,4) of the best indexes pop the population
+        comb_list.append((c,1 - spatial.distance.cosine(pop[c[0]], pop[c[1]])))
+    comb_list.sort(key=lambda x:x[1])
 
-#     # return the children closest and furthers cossim parents
-#     eval_this = [pop[comb_list[0][0][0]], pop[comb_list[0][0][1]], pop[comb_list[-1][0][0]], pop[comb_list[-1][0][1]]]
-#     # lowest similarity - highest similarity
-#     for i in [comb_list[0][0], comb_list[-1][0]]:
-#         # max 4 children
-#         n_children = np.random.randint(1,4, 1)[0]
-#         children = np.zeros((n_children, n_vars))
-#         print(n_children)
-#         print(pop[i[0]].shape)
-#         for child in range(n_children):
-#             # 3 random probs add up to 1
-#             randomness = np.random.dirichlet(np.ones(2),size=1)[0]
-#             if elitist_combination_type == 1:
-#                 y = list(range(265))
-#                 random.shuffle(y)
-#                 y1 = y[:132]
-#                 y2 = y[132:]
-#                 # each child combination of their parents
-#                 # integer gene based
-#                 new_child = np.zeros(265)
-#                 for yy in y1:
-#                     new_child[yy] = pop[i[0]][yy]
-#                 for yy in y2:
-#                     new_child[yy] = pop[i[1]][yy]
-#                 children[child] = new_child
-#             else:
-#                 children[child] = pop[i[0]]*float(randomness[0])+\
-#                                     pop[i[1]]*float(randomness[1])
+    # return the children closest and furthers cossim parents
+    eval_this = [pop[comb_list[0][0][0]], pop[comb_list[0][0][1]], pop[comb_list[-1][0][0]], pop[comb_list[-1][0][1]]]
+    # lowest similarity - highest similarity
+    for i in [comb_list[0][0], comb_list[-1][0]]:
+        # max 4 children
+        n_children = np.random.randint(1,4, 1)[0]
+        children = np.zeros((n_children, n_vars))
+        print(n_children)
+        print(pop[i[0]].shape)
+        for child in range(n_children):
+            # 3 random probs add up to 1
+            randomness = np.random.dirichlet(np.ones(2),size=1)[0]
+            if elitist_combination_type == 1:
+                y = list(range(265))
+                random.shuffle(y)
+                y1 = y[:132]
+                y2 = y[132:]
+                # each child combination of their parents
+                # integer gene based
+                new_child = np.zeros(265)
+                for yy in y1:
+                    new_child[yy] = pop[i[0]][yy]
+                for yy in y2:
+                    new_child[yy] = pop[i[1]][yy]
+                children[child] = new_child
+            else:
+                children[child] = pop[i[0]]*float(randomness[0])+\
+                                    pop[i[1]]*float(randomness[1])
 
-#             # mutate child
-#             children[child] = mutate(children[child])
+            # mutate child
+            children[child] = mutate(children[child])
 
-#             # new_population = np.vstack((new_population, children[child]))
-#             new_population.append(children[child])
-#             eval_this.append(children[child])
-#     r = evaluate(eval_this)
-#     print(r)
-#     print("TOT HIERRRRRRRRRRR")
-#     return new_population
+            # new_population = np.vstack((new_population, children[child]))
+            new_population.append(children[child])
+            eval_this.append(children[child])
+    r = evaluate(eval_this)
+    print(r)
+    print("TOT HIERRRRRRRRRRR")
+    return new_population
     
 
 def crossover(population):
@@ -138,7 +144,7 @@ def crossover(population):
     # print("Pop shape", population.shape[0])
     # new_population = np.zeros((0,n_vars))
     new_population = []
-    # new_population = elitism_breeding(population, new_population)
+    new_population = elitism_breeding(population, new_population)
     for pop in range(1,int(population.shape[0]/2)):
 
         p1f1 = tournament_selection(population)
@@ -230,6 +236,13 @@ for i in range(generation_number, max_generations+1):
     best_in_pop = np.argsort(fitness_pop)[-2:]
     mean, std = np.mean(fitness_pop), np.std(fitness_pop)
     
+    if fitness_pop[best_in_pop[-1]] > old_best_score:
+        old_best_score = fitness_pop[best_in_pop[-1]]
+        nr_unchanged = 0
+    else:
+        nr_unchanged+=1
+    
+
     print(f"Mean: {mean}\nSTD: {std}\nBest: {fitness_pop[best_in_pop[-1]]}\nSecond best: {fitness_pop[best_in_pop[-2]]}")
 
     # saves the results for population
@@ -242,7 +255,9 @@ for i in range(generation_number, max_generations+1):
     solutions = [population, fitness_pop]
     env.update_solutions(solutions)
     env.save_state()
-
+    if nr_unchanged > 14:
+        print("Early stopping activated")
+        break
 
 end_time = time.time() 
 print(f"Time was {str(round((end_time-start_time)/60))} minutes")
