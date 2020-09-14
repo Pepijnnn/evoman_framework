@@ -53,13 +53,14 @@ n_vars = (env.get_num_sensors()+1)*n_hidden_neurons + (n_hidden_neurons+1)*5
 
 dom_u = 1
 dom_l = -1
-npop = 100
-gens = 30
-mutation = 0.02
+npop = 50
+gens = 100
+mutation = 0.008
 last_best = 0
 
 # early stopping parameter after 15 rounds
 stopping = False
+early_stopping_rounds = 15
 
 
 # runs simulation
@@ -89,15 +90,39 @@ def evaluate(x):
 
 
 # tournament
+# def tournament(pop):
+#     fittest =  np.random.randint(0,pop.shape[0], 1)
+
+#     for _ in range(np.random.randint(1,pop.shape[0])):
+#         c2 =  np.random.randint(0,pop.shape[0], 1)
+#         if fit_pop[c2] > fit_pop[fittest]:
+#             fittest = c2
+
+#     return pop[fittest][0], fittest
+
+# randomly select two indivs out of pop and return the fittest
 def tournament(pop):
-    fittest =  np.random.randint(0,pop.shape[0], 1)
+    c1 = np.random.randint(0,pop.shape[0],1)
+    c2 = np.random.randint(0,pop.shape[0],1)
 
-    for _ in range(np.random.randint(1,pop.shape[0])):
-        c2 =  np.random.randint(0,pop.shape[0], 1)
-        if fit_pop[c2] > fit_pop[fittest]:
-            fittest = c2
+    # get different parents
+    while c2 == c1:
+        c2 = np.random.randint(0,pop.shape[0],1)
+    c3 = np.random.randint(0,pop.shape[0],1)
+    while c3 == c1 or c3 == c2:
+        c3 = np.random.randint(0,pop.shape[0],1)
 
-    return pop[fittest][0], fittest
+    best = np.argmax([fit_pop[c1],fit_pop[c2],fit_pop[c3]])
+
+    if best == 0:
+        return pop[c1][0], c1
+    elif best == 1:
+        return pop[c2][0], c2
+    elif best == 2:
+        return pop[c3][0], c3
+    else:
+        print("Out of best array")
+        return False
 
 
 # limits
@@ -120,7 +145,11 @@ def crossover(pop):
     for p in range(0,pop.shape[0], 2):
         p1, pos_1 = tournament(pop)
         p2, pos_2 = tournament(pop)
+        while pos_1 == pos_2:
+            p2, pos_2 = tournament(pop)
         p3, pos_3 = tournament(pop)
+        while pos_2 == pos_3:
+            p3, pos_3 = tournament(pop)
 
 
         fit_1 = fit_pop[pos_1]
@@ -273,7 +302,7 @@ for i in range(ini_g+1, gens):
         last_sol = best_sol
         notimproved = 0
 
-    if notimproved >= 15:
+    if notimproved >= early_stopping_rounds:
         print("Early stopping activated")
         stopping = True
         # file_aux  = open(experiment_name+'/results.txt','a')
