@@ -67,7 +67,8 @@ early_stopping_rounds = 15
 def simulation(env,x):
     f,p,e,t = env.play(pcont=x)
 
-    f = (1001 - t)/1000 *(p-e)
+    f = 4**((1001 - t)/1000) * 25**((p-e)/100)
+    # f = 25**((1001 - t)/1000) + 75**((p-e)/100)
     print("Own cool fitness score: {}".format(f))
     return f
 
