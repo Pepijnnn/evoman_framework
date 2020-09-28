@@ -4,3 +4,6 @@ dummy_demo/evoman_logs.txt
 test/evoman_logs.txt
 controller_specialist_demo/evoman_logs.txt
 controller_generalist_demo/evoman_logs.txt
+*.pyc
+TASK1_NEAT_TEST
+TASK2_NEAT_TEST_fitnessfunc_2
