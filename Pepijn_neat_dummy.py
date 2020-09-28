@@ -19,14 +19,11 @@ experiment_name = 'TASK1_NEAT_TEST_2'
 config_filename_save = "NEAT_TEST1_CONFIG1"
 run_mode = 'train'
 n_hidden_neurons = 10 #,-- mandotoro
-n_pop = 100
-gens = 30
+n_pop = 20
+gens = 10
 
 if not os.path.exists(experiment_name):
 	os.makedirs(experiment_name)
-
-
-
 
 class player_controller(Controller):
 	def control(self, params, cont):
@@ -58,6 +55,7 @@ class player_controller(Controller):
 			release = 0
 
 		return [left, right, jump, shoot, release]
+
 # initializes environment with ai player using random controller, playing against static enemy
 env = Environment(experiment_name=experiment_name,
 				  enemies=[2],
@@ -69,15 +67,10 @@ env = Environment(experiment_name=experiment_name,
 # tried fitness functions
 # f2 = 2**((1001 - t)/1000) * 10**((p-e)/100)
 
-# def simulation(env,x):
-# 	f,p,e,t = env.play(pcont=x)
-# 	# f2 = 2**((1001 - t)/1000) * 10**((p-e)/100)
-# 	# print(f"old fitness: {f}, new fitness: {f2}")
-# 	return f
 # runs simulation
 def simulation(env,x, test=False):
 	f,p,e,t = env.play(pcont=x)
-	f2 = 2**((1001 - t)/1000) * 10**((p-e)/100)
+	# f2 = 2**((1001 - t)/1000) * 10**((p-e)/100)
 	if test == True:
 		indiv_gain = p - e
 		return (f, indiv_gain)
@@ -86,18 +79,6 @@ def simulation(env,x, test=False):
 
 def evaluate(x, test=False):
 	return np.array([simulation(env,y,test) for y in x])
-
-# evaluation
-# def evaluate(x):
-    # return np.array(list(map(lambda y: simulation(env,y), x)))
-
-# def eval_genomes(genomes, config):
-#     for genome_id, genome in genomes:
-#         genome.fitness = 4.0
-#         net = neat.nn.FeedForwardNetwork.create(genome, config)
-#         for xi, xo in zip(xor_inputs, xor_outputs):
-#             output = net.activate(xi)
-#             genome.fitness -= (output[0] - xo[0]) ** 2
 
 def eval_genomes(genomes, config):
 	for genome_id, genome in genomes:
@@ -112,28 +93,16 @@ def run():
 							neat.DefaultSpeciesSet, neat.DefaultStagnation,
 							config_path)
 
-	# if run_mode =='test':
-	# 	# bsol = np.loadtxt(f"{experiment_name}/best.txt")
-	# 	with open('winner.pkl', 'rb') as f:
-	# 		winner = pkl.load(f)
-	# 	winner_net = neat.nn.FeedForwardNetwork.create(winner, config)
-	# 	print( '\n RUNNING SAVED BEST SOLUTION \n')
-	# 	env.update_parameter('speed','normal')
-	# 	f = simulation(env, winner_net)
-	# 	print(f"Fitness is {f}")
-	# 	# evaluate([bsol])
-	# 	sys.exit(0)
 	if run_mode =='test':
 		for i in range(5):
 			# bsol = np.loadtxt(experiment_name+'/best.txt')
-			with open('winner.pkl', 'rb') as f:
+			with open(f'{experiment_name}/winner.pkl', 'rb') as f:
 				winner = pkl.load(f)
 			winner_net = neat.nn.FeedForwardNetwork.create(winner, config)
 			print( '\n RUNNING SAVED BEST SOLUTION \n')
 			env.update_parameter('speed','normal')
 			# fpop_ig_array = evaluate([bsol], True)
 			farr = simulation(env, winner_net, True)
-			print(farr)
 			print(f"Fitness : {farr[0]}\nIndividual Gain: {farr[1]}")
 			file_best  = open(experiment_name+'/best_ig.txt','a')
 			file_best.write('instance individual_gain') if i == 0 else None
@@ -141,7 +110,7 @@ def run():
 			file_best.close()
 		sys.exit(0)
 
-	config.pop_size = 3
+	config.pop_size = n_pop
 	pop = neat.Population(config)
 
 	pop.add_reporter(neat.StdOutReporter(True))
@@ -151,7 +120,7 @@ def run():
 	checkpoint = neat.Checkpointer()
 	pop.add_reporter(checkpoint)
 
-	generations = 2
+	generations = gens
 	winner = pop.run(eval_genomes, generations)
 
 
