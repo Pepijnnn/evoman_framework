@@ -20,20 +20,21 @@ import glob, os
 from sklearn import preprocessing
 
 for hh in range(1,2):
-    experiment_name = f'Ass2_TEST_{hh}'
+    experiment_name = f'Ass2_TEST5_en26_blend_nomask_{hh}'
     if not os.path.exists(experiment_name):
         os.makedirs(experiment_name)
 
     n_hidden_neurons = 10
 
-    # initializes simulation in individual evolution mode, for single static enemy.
+    # initializes simulation in individual evolution mode, for multiple enemies
     env = Environment(experiment_name=experiment_name,
-                    enemies=[1],
-                    playermode="ai",
-                    player_controller=player_controller(n_hidden_neurons),
-                    enemymode="static",
-                    level=2,
-                    speed="fastest")
+                  enemies=[2,6],
+                  multiplemode="yes",
+                  playermode="ai",
+                  player_controller=player_controller(n_hidden_neurons),
+                  enemymode="static",
+                  level=2,
+                  speed="fastest")
 
     # default environment fitness is assumed for experiment
 
@@ -60,6 +61,9 @@ for hh in range(1,2):
     mutation = 0.02
     last_best = 0
 
+    # Blend crossover alpha
+    alpha = 0.5
+
     # early stopping parameter after 15 rounds
     stopping = False
     early_stopping_rounds = 50
@@ -69,14 +73,15 @@ for hh in range(1,2):
     # return 0.9*(100 - self.get_enemylife()) + 0.1*self.get_playerlife() - numpy.log(self.get_time())
     # new: return values.mean() - values.std()
 
-
     # runs simulation
     def simulation(env,x, test=False):
         f,p,e,t = env.play(pcont=x)
         if test == True:
             indiv_gain = p - e
             return (f, indiv_gain)
-        print("Old cool fitness score: {}".format(f))
+        # print("Old cool fitness score: {}".format(f))
+        print(f"fitpop:{f}")
+        print(f.mean()-f.std(), f.mean(), f.std())
         return f
 
     def evaluate(x, test=False):
@@ -97,8 +102,7 @@ for hh in range(1,2):
 
         dists = distance_matrix([e_individual[1]], population)[0]
         tmp = [sharing(d, sigma, alpha) for d in dists]
-        den = sum(tmp)
-        return num/den,
+        return num/sum(tmp),
 
 
     # tournament
@@ -149,8 +153,23 @@ for hh in range(1,2):
             for f in range(0,n_offspring):
                 randomness = np.random.dirichlet(np.ones(2),size=1)[0]
                 # offspring
-                offspring[f] = p1*float(randomness[0])+\
-                            p2*float(randomness[1])
+                offchance = np.random.uniform(0,1)
+                if offchance <= 0.34:
+                    offspring[f] = p1*float(randomness[0])+\
+                                   p2*float(randomness[1])
+                # combination using mask
+                # elif 0.34 < offchance <= 0.67:
+                #     par1_mask = np.random.randint(0,2,size=len(offspring[f]))
+                #     par2_mask = np.logical_not(par1_mask)
+                #     offspring[f] = (par1_mask*p1) + (par2_mask*p2)
+                # blend crossover
+                else:
+                    for i, (x1,x2) in enumerate(zip(p1,p2)):
+                        min_par = np.minimum(p1[i],p2[i])
+                        max_par = np.maximum(p1[i],p2[i])
+                        maxmin = max_par-min_par
+                        offspring[f][i] = np.random.uniform(min_par-alpha*maxmin,max_par+alpha*maxmin)
+
 
                 # mutation
                 for i in range(0,len(offspring[f])):
@@ -173,10 +192,13 @@ for hh in range(1,2):
 
                 total_offspring = np.vstack((total_offspring, offspring[f]))
         return total_offspring
+    
+    def kill_worst_genomes():
+        pass
 
 
     # loads file with the best solution for testing
-    if run_mode =='test':
+    if run_mode == 'test':
         for i in range(5):
             bsol = np.loadtxt(experiment_name+'/best.txt')
             print( '\n RUNNING SAVED BEST SOLUTION \n')
@@ -188,6 +210,20 @@ for hh in range(1,2):
             file_best.write(f'\n {i} {fpop_ig_array[0][1]}')
             file_best.close()
         continue
+    elif run_mode == 'testall':
+        for i in range(5):
+            bsol = np.loadtxt(experiment_name+'/best.txt')
+            print( '\n RUNNING SAVED BEST SOLUTION \n')
+            env.update_parameter('speed','normal')
+            env.update_parameter('enemies',[1,2,3,4,5,6,7,8,9])
+            fpop_ig_array = evaluate([bsol], True)
+            print(f"Fitness : {fpop_ig_array[0][0]}\nIndividual Gain: {fpop_ig_array[0][1]}")
+            file_best  = open(experiment_name+'/best_ig_all.txt','a')
+            file_best.write('instance individual_gain') if i == 0 else None
+            file_best.write(f'\n {i} {fpop_ig_array[0][1]}')
+            file_best.close()
+        continue
+
 
 
     # initializes population loading old solutions or generating new ones
@@ -238,7 +274,7 @@ for hh in range(1,2):
     last_sol = fit_pop[best]
     notimproved = 0
 
-    
+    final_best_indiv = (0, 0)
     for i in range(ini_g+1, gens):
         # if i>4:
         #     use_new_f = True
@@ -257,12 +293,12 @@ for hh in range(1,2):
 
         # fitness sharing
         # shared_fitness(fitness_pop, individual, population, sigma, alpha)
-        # print(fit_pop_cp)
         # print(type(fit_pop_cp))
 
         fit_pop_fs = [shared_fitness(fit_pop, (e, i), pop, sigma=1.5, alpha=1.0) for e, i in enumerate(pop)]
         fit_pop_cp = np.array(fit_pop_fs)
         fit_pop = np.squeeze(fit_pop_cp)
+        print(fit_pop, fit_pop.shape)
 
         # use sklearn minmax scaler
         fit_pop_norm = preprocessing.minmax_scale(fit_pop)  
@@ -273,8 +309,7 @@ for hh in range(1,2):
         fit_pop = fit_pop[chosen]
 
 
-        # searching new areas
-
+        # early stopping
         if best_sol <= last_sol:
             notimproved += 1
         else:
@@ -282,8 +317,7 @@ for hh in range(1,2):
             notimproved = 0
 
         if notimproved >= early_stopping_rounds:
-            print("Early stopping activated")
-            stopping = True
+            kill_worst_genomes()
 
         best = np.argmax(fit_pop)
         std  =  np.std(fit_pop)
@@ -301,8 +335,11 @@ for hh in range(1,2):
         file_aux.write(str(i))
         file_aux.close()
 
-        # saves file with the best solution
-        np.savetxt(experiment_name+'/best.txt',pop[best])
+        # saves file with the best solution if its best
+        if fit_pop[best] > final_best_indiv[0]:
+            np.savetxt(experiment_name+'/best.txt',pop[best])
+            final_best_indiv[0] = fit_pop[best]
+            final_best_indiv[1] = pop[best]
 
         # saves simulation state
         solutions = [pop, fit_pop]
