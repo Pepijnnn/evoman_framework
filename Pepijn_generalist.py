@@ -7,6 +7,7 @@
 
 # imports framework
 import sys
+import os
 sys.path.insert(0, 'evoman')
 from environment import Environment
 from demo_controller import player_controller
@@ -19,8 +20,11 @@ from math import fabs,sqrt
 import glob, os
 from sklearn import preprocessing
 
+# turn off video
+os.environ["SDL_VIDEODRIVER"] = "dummy"
+
 for hh in range(1,2):
-    experiment_name = f'Ass2_TEST5_en26_blend_nomask_{hh}'
+    experiment_name = f'Ass2_TEST13_2_elitism{hh}'
     if not os.path.exists(experiment_name):
         os.makedirs(experiment_name)
 
@@ -28,7 +32,7 @@ for hh in range(1,2):
 
     # initializes simulation in individual evolution mode, for multiple enemies
     env = Environment(experiment_name=experiment_name,
-                  enemies=[2,6],
+                  enemies=[2,4],
                   multiplemode="yes",
                   playermode="ai",
                   player_controller=player_controller(n_hidden_neurons),
@@ -48,7 +52,7 @@ for hh in range(1,2):
 
     # genetic algorithm params
 
-    run_mode = 'train' # train or test
+    run_mode = 'train' # train or test or testall
     ea_type = "2par_oldfit" # 3par_ownfit or 2par_oldfit
 
     # number of weights for multilayer with 10 hidden neurons
@@ -56,10 +60,14 @@ for hh in range(1,2):
 
     dom_u = 1
     dom_l = -1
-    npop = 10
-    gens = 10
+    npop = 6
+    gens = 4
     mutation = 0.02
     last_best = 0
+
+    # fitness sharing sigma = how much space and alpha = multiplication factor
+    fs_sigma = 10.0
+    fs_alpha = 1.0
 
     # Blend crossover alpha
     alpha = 0.5
@@ -68,6 +76,7 @@ for hh in range(1,2):
     stopping = False
     early_stopping_rounds = 50
     use_new_f = False
+    live_per = 0.0
 
     # old fitness:
     # return 0.9*(100 - self.get_enemylife()) + 0.1*self.get_playerlife() - numpy.log(self.get_time())
@@ -76,12 +85,23 @@ for hh in range(1,2):
     # runs simulation
     def simulation(env,x, test=False):
         f,p,e,t = env.play(pcont=x)
+        # experiment with decreasing amounts
+        # print(f,p,e,t,live_per)
+        # if live_per <= 0.9:
+        #     print("IN")
+        #     if t >=0:
+        #         f = (1.0-live_per)*(100 - e) + (live_per)*p - np.log(t)
+        #     else:
+        #         f = (1.0-live_per)*(100 - e) + (live_per)*p - t
+        #     print((1.0-live_per),(100 - e),(live_per)*p, np.log(t))
+        # print(f)
         if test == True:
             indiv_gain = p - e
             return (f, indiv_gain)
         # print("Old cool fitness score: {}".format(f))
         print(f"fitpop:{f}")
-        print(f.mean()-f.std(), f.mean(), f.std())
+
+        # print(f.mean()-f.std(), f.mean(), f.std())
         return f
 
     def evaluate(x, test=False):
@@ -151,24 +171,20 @@ for hh in range(1,2):
             offspring =  np.zeros( (n_offspring, n_vars) )
 
             for f in range(0,n_offspring):
-                randomness = np.random.dirichlet(np.ones(2),size=1)[0]
+                # randomness = np.random.dirichlet(np.ones(2),size=1)[0]
                 # offspring
-                offchance = np.random.uniform(0,1)
-                if offchance <= 0.34:
-                    offspring[f] = p1*float(randomness[0])+\
-                                   p2*float(randomness[1])
-                # combination using mask
-                # elif 0.34 < offchance <= 0.67:
-                #     par1_mask = np.random.randint(0,2,size=len(offspring[f]))
-                #     par2_mask = np.logical_not(par1_mask)
-                #     offspring[f] = (par1_mask*p1) + (par2_mask*p2)
+                # offchance = np.random.uniform(0,1)
+                # if offchance <= 0.34:
+                #     offspring[f] = p1*float(randomness[0])+\
+                #                    p2*float(randomness[1])
+                # else:
+
                 # blend crossover
-                else:
-                    for i, (x1,x2) in enumerate(zip(p1,p2)):
-                        min_par = np.minimum(p1[i],p2[i])
-                        max_par = np.maximum(p1[i],p2[i])
-                        maxmin = max_par-min_par
-                        offspring[f][i] = np.random.uniform(min_par-alpha*maxmin,max_par+alpha*maxmin)
+                for i, (x1,x2) in enumerate(zip(p1,p2)):
+                    min_par = np.minimum(p1[i],p2[i])
+                    max_par = np.maximum(p1[i],p2[i])
+                    maxmin = max_par-min_par
+                    offspring[f][i] = np.random.uniform(min_par-alpha*maxmin,max_par+alpha*maxmin)
 
 
                 # mutation
@@ -176,8 +192,8 @@ for hh in range(1,2):
                     if np.random.uniform(0 ,1)<=mutation:
                         chance = np.random.uniform(0, 1)
                         if chance <= 0.34:
-                            offspring[f][i] =   offspring[f][i]+np.random.normal(0, 1)
-                    # mutate by swapping two genes (own addition)
+                            offspring[f][i] = offspring[f][i]+np.random.normal(0, 1)
+                    # mutate by swapping two genes
                         elif 0.34 < chance <= 0.67:
                             rand_index = np.random.randint(0,len(offspring[f]))
 
@@ -193,9 +209,15 @@ for hh in range(1,2):
                 total_offspring = np.vstack((total_offspring, offspring[f]))
         return total_offspring
     
-    def kill_worst_genomes():
-        pass
-
+    # change the genes of the 1/3 worst population randomly with genes of the 1/3 best
+    def kill_worst_genomes(pop, fit_pop):
+        arg_ordered_pop = np.argsort(fit_pop)
+        worst_indivs = arg_ordered_pop[:int(npop/3)]
+        for i in worst_indivs:
+            for j in range(n_vars):
+                n = np.random.randint(0,int(npop/3))
+                pop[i][j] = pop[arg_ordered_pop[-n-1:]][0][j] 
+        return pop, fit_pop
 
     # loads file with the best solution for testing
     if run_mode == 'test':
@@ -215,7 +237,7 @@ for hh in range(1,2):
             bsol = np.loadtxt(experiment_name+'/best.txt')
             print( '\n RUNNING SAVED BEST SOLUTION \n')
             env.update_parameter('speed','normal')
-            env.update_parameter('enemies',[1,2,3,4,5,6,7,8,9])
+            env.update_parameter('enemies',[1,2,3,4,5,6,7,8])
             fpop_ig_array = evaluate([bsol], True)
             print(f"Fitness : {fpop_ig_array[0][0]}\nIndividual Gain: {fpop_ig_array[0][1]}")
             file_best  = open(experiment_name+'/best_ig_all.txt','a')
@@ -274,38 +296,57 @@ for hh in range(1,2):
     last_sol = fit_pop[best]
     notimproved = 0
 
-    final_best_indiv = (0, 0)
+    final_best_indiv = [0, 0]
+    old_best,old_sbest,old_tbest = 0,0,0
     for i in range(ini_g+1, gens):
         # if i>4:
         #     use_new_f = True
+        if i % 10 == 0:
+            print("add1")
+            if live_per < 0.9:
+                print("add2")
+                live_per += 0.1
+        
+        # save best solution and repeat
+        old_best = pop[np.argmax(fit_pop)]
+        best_three = fit_pop.argsort()[-3:][::-1]
+        old_sbest = pop[best_three[1]]  
+        old_tbest = pop[best_three[2]]
+        # print(old_best,old_sbest,old_tbest)
+        # print(type(old_best),type(old_sbest),type(old_tbest))
+        # print(type(pop), type(pop[0]))
+
 
         offspring = crossover(pop)  # crossover
-        fit_offspring = evaluate(offspring)   # evaluation
+        fit_offspring = evaluate(offspring)  # evaluation
         pop = np.vstack((pop,offspring))
         fit_pop = np.append(fit_pop,fit_offspring)
 
-        best = np.argmax(fit_pop) #best solution in generation
-        fit_pop[best] = float(evaluate(np.array([pop[best] ]))[0]) # repeats best eval, for stability issues
-        best_sol = fit_pop[best]
 
         # selection
-        # fit_pop_cp = fit_pop
-
         # fitness sharing
-        # shared_fitness(fitness_pop, individual, population, sigma, alpha)
-        # print(type(fit_pop_cp))
-
-        fit_pop_fs = [shared_fitness(fit_pop, (e, i), pop, sigma=1.5, alpha=1.0) for e, i in enumerate(pop)]
+        fit_pop_fs = [shared_fitness(fit_pop, (e, i), pop, sigma=fs_sigma, alpha=fs_alpha) for e, i in enumerate(pop)]
         fit_pop_cp = np.array(fit_pop_fs)
         fit_pop = np.squeeze(fit_pop_cp)
         print(fit_pop, fit_pop.shape)
 
+        best = np.argmax(fit_pop)
+        fit_pop[best] = float(evaluate(np.array([pop[best]]))[0])
+        best_sol = fit_pop[best]
+
         # use sklearn minmax scaler
-        fit_pop_norm = preprocessing.minmax_scale(fit_pop)  
+        fit_pop_norm = preprocessing.minmax_scale(fit_pop) 
+
+        # percentagely choose the new population with elitism of the top 3 
         probs = (fit_pop_norm)/(fit_pop_norm).sum()
         chosen = np.random.choice(pop.shape[0], npop , p=probs, replace=False)
-        chosen = np.append(chosen[1:],best)
         pop = pop[chosen]
+        pop = np.vstack((pop[1:],old_best))
+        pop = np.vstack((pop[1:],old_sbest))
+        pop = np.vstack((pop[1:],old_tbest))
+        print("chosen",chosen)
+        # pop = np.array(pop)
+
         fit_pop = fit_pop[chosen]
 
 
@@ -317,7 +358,11 @@ for hh in range(1,2):
             notimproved = 0
 
         if notimproved >= early_stopping_rounds:
-            kill_worst_genomes()
+            file_aux  = open(experiment_name+'/results.txt','a')
+            file_aux.write('\nreplacing_bad_individuals')
+            file_aux.close()
+            pop, fit_pop = kill_worst_genomes(pop, fit_pop)
+            notimproved = 0
 
         best = np.argmax(fit_pop)
         std  =  np.std(fit_pop)
@@ -338,6 +383,9 @@ for hh in range(1,2):
         # saves file with the best solution if its best
         if fit_pop[best] > final_best_indiv[0]:
             np.savetxt(experiment_name+'/best.txt',pop[best])
+            file_aux  = open(experiment_name+'/best_fit.txt','a')
+            file_aux.write(f'Best fitness is now {fit_pop[best]}\n{pop[best]}\n\n')
+            file_aux.close()
             final_best_indiv[0] = fit_pop[best]
             final_best_indiv[1] = pop[best]
 
