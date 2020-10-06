@@ -32,7 +32,7 @@ for hh in range(1,2):
 
     # initializes simulation in individual evolution mode, for multiple enemies
     env = Environment(experiment_name=experiment_name,
-                  enemies=[2,4],
+                  enemies=[1,5,6],
                   multiplemode="yes",
                   playermode="ai",
                   player_controller=player_controller(n_hidden_neurons),
@@ -60,8 +60,8 @@ for hh in range(1,2):
 
     dom_u = 1
     dom_l = -1
-    npop = 6
-    gens = 4
+    npop = 100
+    gens = 50
     mutation = 0.02
     last_best = 0
 
@@ -339,7 +339,9 @@ for hh in range(1,2):
 
         # percentagely choose the new population with elitism of the top 3 
         probs = (fit_pop_norm)/(fit_pop_norm).sum()
-        chosen = np.random.choice(pop.shape[0], npop , p=probs, replace=False)
+        print(pop.shape[0],npop)
+        chosen = np.random.choice(pop.shape[0], npop-3 , p=probs, replace=False)
+        # print(chosen.shape)
         pop = pop[chosen]
         pop = np.vstack((pop[1:],old_best))
         pop = np.vstack((pop[1:],old_sbest))
