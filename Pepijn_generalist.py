@@ -64,6 +64,7 @@ for hh in range(1,2):
     gens = 50
     mutation = 0.02
     last_best = 0
+    tournament_size = 8
 
     # fitness sharing sigma = how much space and alpha = multiplication factor
     fs_sigma = 10.0
@@ -158,7 +159,7 @@ for hh in range(1,2):
 
         total_offspring = np.zeros((0,n_vars))
     
-        for p in range(0,pop.shape[0], 2):
+        for p in range(0,npop, 2):
             p1, pos_1 = tournament(pop)
             p2, pos_2 = tournament(pop)
             while pos_1 == pos_2:
@@ -167,7 +168,7 @@ for hh in range(1,2):
             fit_1 = fit_pop[pos_1]
             fit_2 = fit_pop[pos_2]
 
-            n_offspring =   np.random.randint(1,4, 1)[0]
+            n_offspring = 8
             offspring =  np.zeros( (n_offspring, n_vars) )
 
             for f in range(0,n_offspring):
@@ -254,7 +255,7 @@ for hh in range(1,2):
 
         print( '\nNEW EVOLUTION\n')
 
-        pop = np.random.uniform(dom_l, dom_u, (npop, n_vars))
+        pop = np.random.uniform(dom_l, dom_u, (4*npop, n_vars))
         fit_pop = evaluate(pop)
         best = np.argmax(fit_pop)
         mean = np.mean(fit_pop)
@@ -311,11 +312,6 @@ for hh in range(1,2):
         old_best = pop[np.argmax(fit_pop)]
         best_three = fit_pop.argsort()[-3:][::-1]
         old_sbest = pop[best_three[1]]  
-        old_tbest = pop[best_three[2]]
-        # print(old_best,old_sbest,old_tbest)
-        # print(type(old_best),type(old_sbest),type(old_tbest))
-        # print(type(pop), type(pop[0]))
-
 
         offspring = crossover(pop)  # crossover
         fit_offspring = evaluate(offspring)  # evaluation
@@ -340,12 +336,11 @@ for hh in range(1,2):
         # percentagely choose the new population with elitism of the top 3 
         probs = (fit_pop_norm)/(fit_pop_norm).sum()
         print(pop.shape[0],npop)
-        chosen = np.random.choice(pop.shape[0], npop-3 , p=probs, replace=False)
+        chosen = np.random.choice(pop.shape[0], npop-2 , p=probs, replace=False)
         # print(chosen.shape)
         pop = pop[chosen]
         pop = np.vstack((pop[1:],old_best))
         pop = np.vstack((pop[1:],old_sbest))
-        pop = np.vstack((pop[1:],old_tbest))
         print("chosen",chosen)
         # pop = np.array(pop)
 
