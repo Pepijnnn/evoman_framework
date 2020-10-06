@@ -67,7 +67,7 @@ for hh in range(1,2):
     tournament_size = 8
 
     # fitness sharing sigma = how much space and alpha = multiplication factor
-    fs_sigma = 10.0
+    fs_sigma = 5.0
     fs_alpha = 1.0
 
     # Blend crossover alpha
